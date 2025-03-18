@@ -39,6 +39,9 @@ let parseFile() =
     
         let sb = new StringBuilder(10 * 1024)
         use fs = File.CreateText(prefix + (suffix filename))
+        let pwd = System.IO.Path.GetDirectoryName(".");
+        let current_path = System.IO.Path.Combine(pwd, prefix + (suffix filename))
+        // Console.WriteLine("generating bindings in directory: " + current_path)
         match generator with
         | "-fs" -> do 
             sb |> FSharp.writeTemplate libname |> string |> fs.Write
