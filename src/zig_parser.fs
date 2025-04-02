@@ -35,36 +35,34 @@ type ParsedContext = {
     enums: list<EnumDecl>
     structs: list<StructDecl>
     fns: list<FnDecl>
-}
-
-    
+}    
 
 module Parser = 
     open System
     open System.Text
     open System.Linq
 
-
     /// a collection of all types present in zig file
-    let internal primitive_types = [
-        "c_int"
-        "c_uint"
-        "isize"
-        "usize"
-        "f32"
-        "f64"
-        "u16"
-        "u32"
-        "u64"
-        "i16"
-        "i32"
-        "i64"
-        "u8"
-        "bool"
-    ]
+    // let internal primitive_types = [
+    //     "c_int"
+    //     "c_uint"
+    //     "isize"
+    //     "usize"
+    //     "f32"
+    //     "f64"
+    //     "u16"
+    //     "u32"
+    //     "u64"
+    //     "i16"
+    //     "i32"
+    //     "i64"
+    //     "u8"
+    //     "bool"
+    // ]
 
-    let internal user_defined_types = ResizeArray<string>()
+    // let internal user_defined_types = ResizeArray<string>()
 
+    // returns a newly allocoted string from the slice of the StrSlice
     let toString (s:StrSlice) =
         String(s.Array.AsSpan(s.Offset, s.Count))
             
@@ -86,6 +84,7 @@ module Parser =
         else
             StrSlice()
 
+    /// returns the slice up to encoutering the c:char from the current StrSlice instance
     let readSlice (src:StrSlice) (c:char) =
         let mutable n = 0
         let mutable b = false
@@ -108,26 +107,28 @@ module Parser =
         let r = max a b
         StrSlice(slice.Array, slice.Offset + l, r - l + 1)
 
+    [<Obsolete>]
     let trimFromStart (n:int) (slice:StrSlice) =
         slice.Slice(n)
 
+    [<Obsolete>]
     let trimFromEnd (n:int) (slice:StrSlice) =
         slice.Slice(0, slice.Count - n)
 
 
     /// compares the characters of s StringSlice with a sting
-    let equal (a:StrSlice) (b:string) =
-        let mutable r = if b.Length = 1 then a[0] = b[0] else a.Count = b.Length
+    let equal (str:string) (slice:StrSlice) =
+        let mutable r = if str.Length = 1 then slice[0] = str[0] else slice.Count = str.Length
         let mutable i = 0
-        while i < a.Count && r do
-            r <- r && a[i] = b[i]
+        while i < slice.Count && r do
+            r <- r && slice[i] = str[i]
             i <- i + 1
         r            
 
     let exists (slice:StrSlice) (collection:seq<string>) =
         let mutable b = false
         for s in collection do
-            b <- b || (equal slice s)
+            b <- b || (equal s slice)
         b
     
     [<Obsolete>]
@@ -136,7 +137,7 @@ module Parser =
         let mutable i = 0
         let mutable b = str.Length = slice.Count
         while i + str.Length <= slice.Count && (not b) do
-            b <- equal (slice.Slice(i, str.Length)) str 
+            b <- equal str (slice.Slice(i, str.Length))
             idx <- if b then i else idx
             i <- i + 1
         idx        
@@ -144,9 +145,9 @@ module Parser =
     let indexOf (str:string) (slice:StrSlice) =
         let mutable i = 0
         let mutable b = str.Length = slice.Count
-        let mutable idx = if b && (equal slice str) then 0 else -1
+        let mutable idx = if b && (equal str slice) then 0 else -1
         while i + str.Length <= slice.Count && (not b) do
-            b <- equal (slice.Slice(i, str.Length)) str
+            b <- equal str (slice.Slice(i, str.Length))
             idx <- if b then i else idx
             i <- i + 1
         if idx >= 0 then ValueSome idx else ValueNone
@@ -159,7 +160,7 @@ module Parser =
 
     let startsWith (slice:StrSlice) (str:string) =
         let s = StrSlice(slice.Array, slice.Offset, str.Length)
-        equal s str
+        equal str s
 
     /// returns the in between StrSlice of two strings
     let extract (str_a:string) (str_b:string) (slice:StrSlice) =
@@ -196,23 +197,14 @@ module Parser =
         elif contains "enum(c_int)" line then EnumDeclaration
         else NoDeclaration
 
-    let (|IsPrimitive|IsStruct|IsPointer|) line = 
-        if (exists line user_defined_types) then IsStruct
-        elif (exists line primitive_types) then IsPrimitive
-        elif (startsWith line "*") || (startsWith line "[*]") || (startsWith line "[*c]") then IsPointer
-        else failwith "not appropriate case"       
-                
-    let parseField (s:StrSlice) =
-        match indexOf ":" s with
-        | ValueSome idx ->
-            let trimmed_line = trim s
-            let lhs = trimmed_line.Slice(0,idx)
-            let rhs = trimmed_line.Slice(idx, trimmed_line.Count - idx - 1)
-            (toString lhs, toString rhs)
-        | ValueNone -> 
-            failwith "failed to parse field, does not contain ':'"
-        
+    // let (|IsPrimitive|IsStruct|IsPointer|) line = 
+    //     if (exists line user_defined_types) then IsStruct
+    //     elif (exists line primitive_types) then IsPrimitive
+    //     elif (startsWith line "*") || (startsWith line "[*]") || (startsWith line "[*c]") then IsPointer
+    //     else failwith "not appropriate case"       
+               
 
+    /// parses -backwards- if there is any html-comment / documentation present
     let readSummary (line:StrSlice) =
         let mutable count = 0
         let buffer = ArrayPool<StrSlice>.Shared.Rent(60)
@@ -225,6 +217,8 @@ module Parser =
         ArrayPool<StrSlice>.Shared.Return(buffer)
         summary
         
+    /// reads a src file and parses the content regarding the EnumDecl s, StructDecl s, FnDecls s
+    /// i.e headers of that src file
     let parse (src:string) =
         let enums = ResizeArray<EnumDecl>()
         let structs = ResizeArray<StructDecl>()
@@ -243,11 +237,35 @@ module Parser =
                 let decl = readSlice slice '{'
                 let summary = readSummary line
                 let name = extract "fn" "(" decl |> trim |> toString
-                let args = extract "(" ")" decl |> toString
+                let ret  = extract ")" "{" decl |> trim |> toString
+
+                let args = extract "(" ")" decl
+                let arg_fields = ResizeArray<Elem>()
+                let struct(field_lines,len) = split ',' args
+                for i in 0..len - 1 do
+                    let fl = field_lines[i] |> trim
+                    arg_fields.Add <|
+                        match (indexOf ":" fl) with
+                        | ValueSome a ->
+                            let arg_name = fl.Slice(0, a) |> trim |> toString
+                            let arg_type = fl.Slice(a + 1, fl.Count - a - 1) |> trim |> toString
+                            ArgOfFn (arg_name, arg_type)
+                        | ValueNone ->
+                            if (contains "///" fl) then
+                                let str_comment = fl |> trim |> toString
+                                HtmlComment str_comment 
+                            else
+                                failwith $"all cases failed: -{toString fl}-"                        
+
+                fns.Add({summary = summary; name = name; args = (List.ofSeq arg_fields); ret = ret}) 
+                ArrayPool<StrSlice>.Shared.Return(field_lines)
                 
+                // for testing purposes
                 if (List.length summary) > 0 then printfn "%A" summary
                 printfn "-%s-" name
-                printfn "-%s-" args
+                for arg_name in fns.Last().args do printfn "  -%A-" arg_name
+                printfn "-%s-" ret
+                printfn ""
                 
                 advance &slice decl.Count
             | StructDeclaration -> 
@@ -273,8 +291,7 @@ module Parser =
                         | _, _ -> 
                             if (contains "///" fl) then
                                 let str_comment = fl |> trim |> toString
-                                let elem = HtmlComment str_comment 
-                                HtmlComment (toString fl)
+                                HtmlComment str_comment 
                             else
                                 failwith $"all cases failed: -{toString fl}-"                        
                 structs.Add({summary = summary; name = name; fields = (List.ofSeq struct_fields)})                   
@@ -284,6 +301,7 @@ module Parser =
                 if (List.length summary) > 0 then printfn "%A" summary
                 printfn "-%s-" name
                 for struct_name in structs.Last().fields do printfn "    -%A-" struct_name                    
+                printfn ""
                 
                 advance &slice decl.Count
             | EnumDeclaration ->
@@ -304,8 +322,7 @@ module Parser =
                         | ValueNone -> 
                             if (contains "///" fl) then
                                 let str_comment = fl |> trim |> toString
-                                let elem = HtmlComment str_comment 
-                                HtmlComment (toString fl)
+                                HtmlComment str_comment 
                             else
                                 failwith $"all cases failed: -{toString fl}-"                        
                 enums.Add({summary = summary; name = name; fields = (List.ofSeq enum_fields)})                   
@@ -315,6 +332,7 @@ module Parser =
                 if (List.length summary) > 0 then printfn "%A" summary
                 printfn "-%s-" name
                 for enum_name in enums.Last().fields do printfn "    -%A-" enum_name                    
+                printfn ""
                 
                 advance &slice decl.Count
             | NoDeclaration -> 
