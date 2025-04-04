@@ -210,7 +210,7 @@ module Parser =
         let buffer = ArrayPool<StrSlice>.Shared.Rent(60)
         let mutable prev_line = readPrevLine line
         while contains "///" prev_line do
-            buffer[count] <- prev_line
+            buffer[count] <- prev_line.Slice(3)  // skipp the "/// " part
             count <- count + 1
             prev_line <- readPrevLine prev_line
         let summary = if count > 0 then [for i in 0..count - 1 -> toString buffer[i]] |> List.rev else List.empty<string>
@@ -261,11 +261,11 @@ module Parser =
                 ArrayPool<StrSlice>.Shared.Return(field_lines)
                 
                 // for testing purposes
-                if (List.length summary) > 0 then printfn "%A" summary
-                printfn "-%s-" name
-                for arg_name in fns.Last().args do printfn "  -%A-" arg_name
-                printfn "-%s-" ret
-                printfn ""
+                // if (List.length summary) > 0 then printfn "%A" summary
+                // printfn "-%s-" name
+                // for arg_name in fns.Last().args do printfn "  -%A-" arg_name
+                // printfn "-%s-" ret
+                // printfn ""
                 
                 advance &slice decl.Count
             | StructDeclaration -> 
@@ -282,7 +282,7 @@ module Parser =
                         match (indexOf ":" fl),(indexOf "," fl) with
                         | ValueSome a, ValueSome b ->
                             let field_name = fl.Slice(0, a) |> trim |> toString
-                            let field_type = fl.Slice(a + 1, b - a) |> trim |> toString
+                            let field_type = fl.Slice(a + 1, b - 1 - a) |> trim |> toString
                             FieldOfStruct (field_name, field_type, None)
                         | ValueSome a, ValueNone ->
                             let field_name = fl.Slice(0, a) |> trim |> toString
@@ -298,10 +298,10 @@ module Parser =
                 ArrayPool<StrSlice>.Shared.Return(field_lines)
                 
                 // for testing purposes
-                if (List.length summary) > 0 then printfn "%A" summary
-                printfn "-%s-" name
-                for struct_name in structs.Last().fields do printfn "    -%A-" struct_name                    
-                printfn ""
+                // if (List.length summary) > 0 then printfn "%A" summary
+                // printfn "-%s-" name
+                // for struct_name in structs.Last().fields do printfn "    -%A-" struct_name                    
+                // printfn ""
                 
                 advance &slice decl.Count
             | EnumDeclaration ->
@@ -329,10 +329,10 @@ module Parser =
                 ArrayPool<StrSlice>.Shared.Return(field_lines)
                 
                 // for testing purposes
-                if (List.length summary) > 0 then printfn "%A" summary
-                printfn "-%s-" name
-                for enum_name in enums.Last().fields do printfn "    -%A-" enum_name                    
-                printfn ""
+                // if (List.length summary) > 0 then printfn "%A" summary
+                // printfn "-%s-" name
+                // for enum_name in enums.Last().fields do printfn "    -%A-" enum_name                    
+                // printfn ""
                 
                 advance &slice decl.Count
             | NoDeclaration -> 

@@ -9,13 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="src/Core.fs" />
     <Compile Include="src/zig_parser.fs" />
     <Compile Include="src/doc_generator.fs" />
     <Compile Include="src/fs_generator.fs" />
-    <Compile Include="src/CSharp.fs" />
-    <Compile Include="src/FSharp.fs" />
-    <Compile Include="src/Program.fs" />
+    <Compile Include="src/cs_generator.fs" />
+    <Compile Include="src/ProgramV2.fs" />
   </ItemGroup>
 
 

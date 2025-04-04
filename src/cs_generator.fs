@@ -2,8 +2,8 @@ namespace Zig2Dotnet
 open System
 open System.Text
 
-module FSGenerator =
-        
+module CSGenerator =
+
     let primitive_types = Map [
         "bool", "bool"
         "u8", "byte"
@@ -12,11 +12,11 @@ module FSGenerator =
         "u64", "long"
         "i32", "int"
         "i64", "long"
-        "f32", "float32"
-        "f64", "float"
+        "f32", "float"
+        "f64", "double"
         "c_int", "int"
-        "isize", "nativeint"
-        "usize", "nativeint"       
+        "isize", "nint"
+        "usize", "nint"       
         "[]const u8", "string"
         "[*c][*c]const u8", "string[]"
         "[*c]const [*c]const u8", "string[]"
@@ -25,81 +25,136 @@ module FSGenerator =
         "[*c]u8", "byte*"
         "[*]u8", "byte*"
         "u8", "byte"
-        "*anyopaque", "nativeint"
-        "void", "void"
-    ]
+        "*anyopaque", "nint"
+        "void", "void"        
+    ]    
 
-    let keywords =  [
+    let keywords = [
         "abstract"
-        "and"
         "as"
-        "assert"
         "base"
+        "bool"
+        "break"
+        "byte"
+        "case"
+        "catch"
+        "char"
+        "checked"
         "class"
+        "const"
+        "continue"
+        "decimal"
         "default"
         "delegate"
         "do"
-        "done"
-        "downcast"
-        "downto"
-        "elif"
+        "double"
         "else"
-        "end"
-        "exception"
+        "enum"
+        "event"
+        "explicit"
         "extern"
         "false"
         "finally"
         "fixed"
+        "float"
         "for"
-        "fun"
-        "function"
-        "global"
+        "foreach"
+        "goto"
         "if"
+        "implicit"
         "in"
-        "inherit"
-        "inline"
+        "int"
         "interface"
         "internal"
-        "lazy"
-        "let"
-        "let!"
-        "match"
-        "match!"
-        "member"
-        "module"
-        "mutable"
+        "is"
+        "lock"
+        "long"
         "namespace"
         "new"
-        "not"
         "null"
-        "open"
-        "or"
+        "object"
+        "operator"
+        "out"
         "override"
+        "params"
         "private"
+        "protected"
         "public"
-        "rec"
+        "readonly"
+        "ref"
         "return"
-        "return!"
-        "select"
+        "sbyte"
+        "sealed"
+        "short"
+        "sizeof"
+        "stackalloc"
         "static"
+        "string"
         "struct"
-        "to"
+        "switch"
+        "this"
+        "throw"
         "true"
         "try"
-        "type"
-        "upcast"
-        "use"
-        "use!"
-        "val"
+        "typeof"
+        "uint"
+        "ulong"
+        "unchecked"
+        "unsafe"
+        "ushort"
+        "using"
+        "virtual"
         "void"
-        "when"
+        "volatile"
         "while"
+        "add"
+        "and"
+        "alias"
+        "ascending"
+        "args"
+        "async"
+        "await"
+        "by"
+        "descending"
+        "dynamic"
+        "equals"
+        "file"
+        "from"
+        "get"
+        "global"
+        "group"
+        "init"
+        "into"
+        "join"
+        "let"
+        "managed"
+        "nameof"
+        "nint"
+        "not"
+        "notnull"
+        "nuint"
+        "on"
+        "or"
+        "orderby"
+        "partial"
+        "partial"
+        "record"
+        "remove"
+        "required"
+        "scoped"
+        "select"
+        "set"
+        "unmanaged"
+        "unmanaged"
+        "value"
+        "var"
+        "when"
+        "where"
+        "where"
         "with"
         "yield"
-        "yield!"
-        "const"
     ]
-
+    
     let private (|IsPrimitive|IsPointer|IsPointerToMany|IsUserDefined|) (str:string) =
         if primitive_types.Keys.Contains(str) then IsPrimitive
         elif str.Contains("[*]") || str.Contains("[*c]") then IsPointerToMany
@@ -117,18 +172,21 @@ module FSGenerator =
         // let b = src_path.Length
         // let libname = src_path[a..b - 5]
         sb
-        |>> "open System"
-        |>> "open System.Runtime.InteropServices"
-        |>> "open System.Diagnostics"
+        |>> "using System;"
+        |>> "using System.Runtime.InteropServices;"
+        |>> "using System.Diagnostics;"
         |>> ""
-        |>> "module " + libname + " = "
+        |>> "namespace " + libname + ";"
+        |>> ""
+        |>> "public static unsafe class " + libname
+        |>> "{"
         // |>> """    \\fix manually libname to have the correct name as of .so, .dll, -native binary of lib"""
-        |>> "    let [<Literal>] libname = " + "\"" + libname + "\""
+        |>> "    const string libname = " + "\"" + libname + "\"" + ";"
         |>> ""
         
-    
-    let [<Literal>] private attr = "    [<Struct; StructLayout(LayoutKind.Sequential)>]"
 
+    let [<Literal>] attr = "    [StructLayout(LayoutKind.Sequential)]"
+        
     /// transforms the name if nesseccary to avoid conflict with keywords
     let transformName (lhs:string) =
         if (List.contains lhs keywords) then "_" + lhs else lhs
@@ -137,33 +195,37 @@ module FSGenerator =
     let transformType (rhs:string) =
         match rhs with
         | IsPrimitive -> primitive_types[rhs]
-        | IsPointer -> "nativeint"
+        | IsPointer -> "nint"
         | IsPointerToMany -> 
             let a = rhs.IndexOf("]") + 1
             let s = rhs[a..]
             s + "[]"
         | IsUserDefined -> rhs
-            
-    
+
+
     let writeParsedContext (ctx:ParsedContext) (sb:StringBuilder) =
         // gen all structs
         for _struct in ctx.structs do
-            for s in _struct.summary do
-                ignore (sb.AppendLine("    ///" + s))
-                
+            if _struct.summary.Length > 0 then
+                ignore (sb.AppendLine("    ///<summary>"))
+                for s in _struct.summary do
+                    ignore (sb.AppendLine("    ///" + s))
+                ignore (sb.AppendLine("    ///</summary>"))
+
             sb
             |>> attr
-            |>> "    type " + _struct.name + " = { "
+            |>> "    public struct " + _struct.name
+            |>> "    {"
             |> ignore
 
             for field in _struct.fields do
                 match field with
-                | HtmlComment c -> 
-                    ignore (sb.AppendLine("    ///" + c))
-                | FieldOfStruct (lhs,rhs,op) -> 
+                | HtmlComment c ->
+                    ignore (sb.Append("    ///<summary>").Append(c).AppendLine("</summary>"))
+                | FieldOfStruct (lhs,rhs,op) ->
                     let n = transformName lhs
                     let t = transformType rhs
-                    ignore (sb.Append("        ").Append(n).Append(": ").AppendLine(t))
+                    ignore (sb.Append("        public ").Append(t).Append(" ").Append(n).AppendLine(","))
                 | _ -> ()
 
             sb
@@ -171,47 +233,53 @@ module FSGenerator =
             |>> ""
             |> ignore
 
+
         // gen all enums
         for _enum in ctx.enums do
-            for s in _enum.summary do
-                ignore (sb.AppendLine("    ///" + s))
-        
+            if _enum.summary.Length > 0 then
+                ignore (sb.AppendLine("    ///<summary>"))
+                for s in _enum.summary do
+                    ignore (sb.AppendLine("    ///" + s))
+                ignore (sb.AppendLine("    ///</summary>"))
+            
             sb
-            |>> "    type " + _enum.name + " = "
+            |>> attr
+            |>> "    public enum " + _enum.name
+            |>> "    {"
             |> ignore
-
-            let mutable i = 0
+            
             for field in _enum.fields do
                 match field with
                 | HtmlComment c ->
-                    ignore (sb.AppendLine("    ///" + c))
+                    ignore (sb.Append("    ///<summary>").Append(c).AppendLine("</summary>"))
                 | FieldOfEnum (lhs,op) ->
                     let n = transformName lhs
-                    ignore (sb.Append("        | ").Append(n).Append(" = "))
-                    let v = match op with 
-                            | Some V -> 
-                                i <- V
-                                V
-                            | None -> i
-                    ignore (sb.AppendLine(string v))
+                    match op with 
+                    | Some v -> 
+                        ignore (sb.Append("        " + n + " = ").Append(string v).AppendLine(","))
+                    | None ->
+                        ignore (sb.Append("        " + n + ","))
                 | _ -> ()
-                i <- i + 1
-            
+
             sb
+            |>> "    }"
             |>> ""
             |> ignore
 
         // gen all fns
         for _fn in ctx.fns do
-            for s in _fn.summary do
-                ignore (sb.AppendLine("    ///" + s))
+            if _fn.summary.Length > 0 then
+                ignore (sb.AppendLine("    ///<summary>"))
+                for s in _fn.summary do
+                    ignore (sb.AppendLine("    ///" + s))
+                ignore (sb.AppendLine("    ///</summary>"))
 
-            ignore (sb.AppendLine("    [<DllImport(libname)>]"))
+            ignore (sb.AppendLine("    [DllImport(libname)]"))
 
             let r = transformType _fn.ret
-            ignore (sb.Append("    extern " + r + " " + _fn.name).Append(" ("))
+            ignore (sb.Append("    public static extern unsafe " + r + " " + _fn.name).Append(" ("))
 
-            for arg in _fn.args do            
+            for arg in _fn.args do
                 match arg with
                 | ArgOfFn (lhs,rhs) ->
                     let n = transformName lhs
@@ -221,8 +289,9 @@ module FSGenerator =
 
             if _fn.args.Length > 0 then ignore (sb.Remove(sb.Length - 2, 2))
             ignore (sb.AppendLine(");").AppendLine(""))
+            
+        ignore (sb.AppendLine("}"))
         sb
-
 
     /// docFn function declaration for FS-autogen
     let docFns (ctx:ParsedContext) (sb:StringBuilder) =
@@ -230,7 +299,7 @@ module FSGenerator =
         for _fn in ctx.fns do
             ignore (sb.Append("    <dt><code>"))            
             let r = transformType _fn.ret
-            ignore (sb.Append("    extern " + r + " ").Append("</code><fnName>").Append(_fn.name).Append("</fnName> ("))
+            ignore (sb.Append("    public static extern unsafe " + r + " ").Append("</code><fnName>").Append(_fn.name).Append("</fnName> ("))
 
             for arg in _fn.args do            
                 match arg with
